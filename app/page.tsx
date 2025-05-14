@@ -1,145 +1,168 @@
-"use client"
+"use client";
 
-import type React from "react"
-import Image from "next/image"
-import Link from "next/link"
+import Image from "next/image";
+import Link from "next/link";
+import type React from "react";
 
-import { useState, useCallback } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Upload, FileJson, FileArchive, Download, Info } from "lucide-react"
-import JSZip from "jszip"
-import { InstructionsModal } from "@/components/instructions-modal"
+import { InstructionsModal } from "@/components/instructions-modal";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import JSZip from "jszip";
+import { Download, FileArchive, FileJson, Info, Upload } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+
+function parse_json(content: string, filename: string) {
+  if (filename.endsWith(".js")) {
+    // Twitter takeouts are js instead of json files
+    // We will only parse files in the data folder that consist of only a single variable definition
+    // So, we remove the variable assignment, and try to parse the rest as json
+    if (!filename.includes("/data/")) return null;
+    content = content.replace(/^.*? = /, "");
+  }
+  return JSON.parse(content);
+}
 
 export default function Home() {
-  const [files, setFiles] = useState<{ name: string; content: any }[]>([])
-  const [selectedFile, setSelectedFile] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [files, setFiles] = useState<{ name: string; content: any }[]>([]);
+  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Add this to ensure console logs are visible
+    console.log("Social Media Takeout Explorer loaded");
+  }, []);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
+    console.log("File upload triggered");
+    const file = event.target.files?.[0];
+    console.log("Selected file:", file?.name);
+    if (!file) return;
 
     if (!file.name.endsWith(".zip")) {
-      setError("Please load a zip file")
-      return
+      setError("Please load a zip file");
+      return;
     }
 
-    setIsLoading(true)
-    setError(null)
-    setFiles([])
-    setSelectedFile(null)
+    setIsLoading(true);
+    setError(null);
+    setFiles([]);
+    setSelectedFile(null);
 
     try {
-      const zip = new JSZip()
-      const contents = await zip.loadAsync(file)
-      const jsonFiles: { name: string; content: any }[] = []
+      console.log("Processing zip file...");
+      const zip = new JSZip();
+      const contents = await zip.loadAsync(file);
+      console.log("Zip loaded, found files:", Object.keys(contents.files).length);
+      const jsonFiles: { name: string; content: any }[] = [];
 
       // Process each file in the zip
       const promises = Object.keys(contents.files).map(async (filename) => {
-        if (!filename.endsWith(".json")) return
-        if (contents.files[filename].dir) return
+        if (!(filename.endsWith(".json") || filename.endsWith(".js"))) return;
+        if (contents.files[filename].dir) return;
 
-        const content = await contents.files[filename].async("string")
+        const content = await contents.files[filename].async("string");
         try {
-          const jsonContent = JSON.parse(content)
-          jsonFiles.push({
-            name: filename,
-            content: jsonContent,
-          })
+          const jsonContent = parse_json(content, filename);
+          if (jsonContent != null)
+            jsonFiles.push({
+              name: filename,
+              content: jsonContent,
+            });
+          console.log(`Processed JSON file: ${filename}`);
         } catch (e) {
-          console.error(`Error parsing ${filename}:`, e)
+          console.error(`Error parsing ${filename}:`, e);
         }
-      })
+      });
 
-      await Promise.all(promises)
+      await Promise.all(promises);
 
       if (jsonFiles.length === 0) {
-        setError("No JSON files found in the zip")
+        setError("No JSON files found in the zip");
       } else {
-        setFiles(jsonFiles)
-        setSelectedFile(jsonFiles[0].name)
+        console.log(`Found ${jsonFiles.length} JSON files`);
+        setFiles(jsonFiles);
+        setSelectedFile(jsonFiles[0].name);
       }
     } catch (e) {
-      console.error("Error processing zip file:", e)
-      setError("Error processing zip file. Please try again.")
+      console.error("Error processing zip file:", e);
+      setError("Error processing zip file. Please try again.");
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-  }
+    e.preventDefault();
+    e.stopPropagation();
+  };
 
   const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
+    e.preventDefault();
+    e.stopPropagation();
 
-    const file = e.dataTransfer.files[0]
-    if (!file) return
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
 
     if (!file.name.endsWith(".zip")) {
-      setError("Please load a zip file")
-      return
+      setError("Please load a zip file");
+      return;
     }
 
-    setIsLoading(true)
-    setError(null)
-    setFiles([])
-    setSelectedFile(null)
+    setIsLoading(true);
+    setError(null);
+    setFiles([]);
+    setSelectedFile(null);
 
     try {
-      const zip = new JSZip()
-      const contents = await zip.loadAsync(file)
-      const jsonFiles: { name: string; content: any }[] = []
+      const zip = new JSZip();
+      const contents = await zip.loadAsync(file);
+      const jsonFiles: { name: string; content: any }[] = [];
 
       // Process each file in the zip
       const promises = Object.keys(contents.files).map(async (filename) => {
-        if (!filename.endsWith(".json")) return
-        if (contents.files[filename].dir) return
+        if (!filename.endsWith(".json")) return;
+        if (contents.files[filename].dir) return;
 
-        const content = await contents.files[filename].async("string")
+        const content = await contents.files[filename].async("string");
         try {
-          const jsonContent = JSON.parse(content)
+          const jsonContent = JSON.parse(content);
           jsonFiles.push({
             name: filename,
             content: jsonContent,
-          })
+          });
         } catch (e) {
-          console.error(`Error parsing ${filename}:`, e)
+          console.error(`Error parsing ${filename}:`, e);
         }
-      })
+      });
 
-      await Promise.all(promises)
+      await Promise.all(promises);
 
       if (jsonFiles.length === 0) {
-        setError("No JSON files found in the zip")
+        setError("No JSON files found in the zip");
       } else {
-        setFiles(jsonFiles)
-        setSelectedFile(jsonFiles[0].name)
+        setFiles(jsonFiles);
+        setSelectedFile(jsonFiles[0].name);
       }
     } catch (e) {
-      console.error("Error processing zip file:", e)
-      setError("Error processing zip file. Please try again.")
+      console.error("Error processing zip file:", e);
+      setError("Error processing zip file. Please try again.");
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
-  const selectedFileContent = selectedFile ? files.find((file) => file.name === selectedFile)?.content : null
+  const selectedFileContent = selectedFile ? files.find((file) => file.name === selectedFile)?.content : null;
 
   const renderJsonKeys = (obj: any, path = "") => {
-    if (!obj || typeof obj !== "object") return null
+    if (!obj || typeof obj !== "object") return null;
 
     return (
       <ul className="pl-4">
         {Object.keys(obj).map((key) => {
-          const currentPath = path ? `${path}.${key}` : key
-          const value = obj[key]
+          const currentPath = path ? `${path}.${key}` : key;
+          const value = obj[key];
 
           if (value && typeof value === "object" && !Array.isArray(value)) {
             return (
@@ -150,7 +173,7 @@ export default function Home() {
                 </div>
                 {renderJsonKeys(value, currentPath)}
               </li>
-            )
+            );
           } else if (Array.isArray(value)) {
             return (
               <li key={currentPath} className="my-1">
@@ -160,7 +183,7 @@ export default function Home() {
                 </div>
                 {value.length > 0 && typeof value[0] === "object" && renderJsonKeys(value[0], `${currentPath}[0]`)}
               </li>
-            )
+            );
           } else {
             return (
               <li key={currentPath} className="my-1">
@@ -169,46 +192,43 @@ export default function Home() {
                   <span className="text-xs text-muted-foreground whitespace-nowrap">{typeof value}</span>
                 </div>
               </li>
-            )
+            );
           }
         })}
       </ul>
-    )
-  }
+    );
+  };
 
   const generateStructure = (obj: any): any => {
     if (typeof obj !== "object" || obj === null) {
-      return typeof obj
+      return typeof obj;
     }
     if (Array.isArray(obj)) {
-      return obj.length > 0 ? [generateStructure(obj[0])] : "array"
+      return obj.length > 0 ? [generateStructure(obj[0])] : "array";
     }
-    const structure: Record<string, any> = {}
+    const structure: Record<string, any> = {};
     for (const [key, value] of Object.entries(obj)) {
-      structure[key] = generateStructure(value)
+      structure[key] = generateStructure(value);
     }
-    return structure
-  }
+    return structure;
+  };
 
   const handleDownloadStructure = useCallback(() => {
-    const structure = files.reduce(
-      (acc, file) => {
-        acc[file.name] = generateStructure(file.content)
-        return acc
-      },
-      {} as Record<string, any>,
-    )
+    const structure = files.reduce((acc, file) => {
+      acc[file.name] = generateStructure(file.content);
+      return acc;
+    }, {} as Record<string, any>);
 
-    const blob = new Blob([JSON.stringify(structure, null, 2)], { type: "application/json" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = "json_structure.json"
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  }, [files])
+    const blob = new Blob([JSON.stringify(structure, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "json_structure.json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [files]);
 
   return (
     <main className="container mx-auto py-8 px-4">
@@ -312,9 +332,12 @@ export default function Home() {
                         onChange={handleFileUpload}
                         className="hidden"
                         id="file-upload"
+                        key={files.length} // Add this to reset the input when files change
                       />
                       <Button asChild size="sm">
-                        <label htmlFor="file-upload">Browse Files</label>
+                        <label htmlFor="file-upload" className="cursor-pointer">
+                          Browse Files
+                        </label>
                       </Button>
                     </>
                   )}
@@ -419,6 +442,5 @@ export default function Home() {
         )}
       </div>
     </main>
-  )
+  );
 }
-
