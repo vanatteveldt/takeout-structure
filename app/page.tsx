@@ -23,6 +23,43 @@ function parse_json(content: string, filename: string) {
   return JSON.parse(content);
 }
 
+async function extract_json(file: File) {
+  const fr = new FileReader();
+  fr.readAsText(file);
+  const jsonText = await file.text();
+  const jsonContent = JSON.parse(jsonText);
+  return [{ name: file.name, content: jsonContent }];
+}
+
+async function extract_zip(file: File) {
+  const zip = new JSZip();
+  const contents = await zip.loadAsync(file);
+  console.log("Zip loaded, found files:", Object.keys(contents.files).length);
+  const jsonFiles: { name: string; content: any }[] = [];
+
+  // Process each file in the zip
+  const promises = Object.keys(contents.files).map(async (filename) => {
+    if (!(filename.endsWith(".json") || filename.endsWith(".js"))) return;
+    if (contents.files[filename].dir) return;
+
+    const content = await contents.files[filename].async("string");
+    try {
+      const jsonContent = parse_json(content, filename);
+      if (jsonContent != null)
+        jsonFiles.push({
+          name: filename,
+          content: jsonContent,
+        });
+      console.log(`Processed JSON file: ${filename}`);
+    } catch (e) {
+      console.error(`Error parsing ${filename}:`, e);
+    }
+  });
+
+  await Promise.all(promises);
+  return jsonFiles;
+}
+
 export default function Home() {
   const [files, setFiles] = useState<{ name: string; content: any }[]>([]);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
@@ -40,8 +77,8 @@ export default function Home() {
     console.log("Selected file:", file?.name);
     if (!file) return;
 
-    if (!file.name.endsWith(".zip")) {
-      setError("Please load a zip file");
+    if (!(file.name.endsWith(".zip") || file.name.endsWith(".json"))) {
+      setError("Please load a zip or json file");
       return;
     }
 
@@ -51,32 +88,9 @@ export default function Home() {
     setSelectedFile(null);
 
     try {
-      console.log("Processing zip file...");
-      const zip = new JSZip();
-      const contents = await zip.loadAsync(file);
-      console.log("Zip loaded, found files:", Object.keys(contents.files).length);
-      const jsonFiles: { name: string; content: any }[] = [];
-
-      // Process each file in the zip
-      const promises = Object.keys(contents.files).map(async (filename) => {
-        if (!(filename.endsWith(".json") || filename.endsWith(".js"))) return;
-        if (contents.files[filename].dir) return;
-
-        const content = await contents.files[filename].async("string");
-        try {
-          const jsonContent = parse_json(content, filename);
-          if (jsonContent != null)
-            jsonFiles.push({
-              name: filename,
-              content: jsonContent,
-            });
-          console.log(`Processed JSON file: ${filename}`);
-        } catch (e) {
-          console.error(`Error parsing ${filename}:`, e);
-        }
-      });
-
-      await Promise.all(promises);
+      console.log(`Processing root file ${file.name}...`);
+      const parser = file.name.endsWith(".zip") ? extract_zip : extract_json;
+      const jsonFiles: { name: string; content: any }[] = await parser(file);
 
       if (jsonFiles.length === 0) {
         setError("No JSON files found in the zip");
@@ -328,7 +342,7 @@ export default function Home() {
                       </p>
                       <input
                         type="file"
-                        accept=".zip"
+                        accept=".zip,.json"
                         onChange={handleFileUpload}
                         className="hidden"
                         id="file-upload"
