@@ -169,50 +169,6 @@ export default function Home() {
 
   const selectedFileContent = selectedFile ? files.find((file) => file.name === selectedFile)?.content : null;
 
-  const renderJsonKeys = (obj: any, path = "") => {
-    if (!obj || typeof obj !== "object") return null;
-
-    return (
-      <ul className="pl-4">
-        {Object.keys(obj).map((key) => {
-          const currentPath = path ? `${path}.${key}` : key;
-          const value = obj[key];
-
-          if (value && typeof value === "object" && !Array.isArray(value)) {
-            return (
-              <li key={currentPath} className="my-1">
-                <div className="flex items-start flex-wrap">
-                  <span className="font-medium text-primary break-all mr-2">{key}</span>
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">Object</span>
-                </div>
-                {renderJsonKeys(value, currentPath)}
-              </li>
-            );
-          } else if (Array.isArray(value)) {
-            return (
-              <li key={currentPath} className="my-1">
-                <div className="flex items-start flex-wrap">
-                  <span className="font-medium text-primary break-all mr-2">{key}</span>
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">Array[{value.length}]</span>
-                </div>
-                {value.length > 0 && typeof value[0] === "object" && renderJsonKeys(value[0], `${currentPath}[0]`)}
-              </li>
-            );
-          } else {
-            return (
-              <li key={currentPath} className="my-1">
-                <div className="flex items-start flex-wrap">
-                  <span className="font-medium text-primary break-all mr-2">{key}</span>
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">{typeof value}</span>
-                </div>
-              </li>
-            );
-          }
-        })}
-      </ul>
-    );
-  };
-
   const generateStructure = (obj: any): any => {
     console.log(obj);
     if (obj == null) return "null";
