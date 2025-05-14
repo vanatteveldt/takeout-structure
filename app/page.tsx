@@ -214,18 +214,24 @@ export default function Home() {
   };
 
   const generateStructure = (obj: any): any => {
-    if (typeof obj !== "object" || obj === null) {
+    console.log(obj);
+    if (obj == null) return "null";
+    if (typeof obj !== "object") {
       return typeof obj;
     }
     if (Array.isArray(obj)) {
-      return obj.length > 0 ? [generateStructure(obj[0])] : "array";
+      return obj.length > 0 ? obj.map(generateStructure) : "emptyarray";
     }
+    if (Object.keys(obj).length === 0) return "emptydict";
+
     const structure: Record<string, any> = {};
     for (const [key, value] of Object.entries(obj)) {
       structure[key] = generateStructure(value);
     }
     return structure;
   };
+
+  const selectedStructure = selectedFileContent == null ? null : generateStructure(selectedFileContent);
 
   const handleDownloadStructure = useCallback(() => {
     const structure = files.reduce((acc, file) => {
@@ -409,31 +415,21 @@ export default function Home() {
               <Tabs defaultValue="structure">
                 <TabsList className="mb-4 overflow-x-auto scrollbar-thin">
                   <TabsTrigger value="structure">Structure</TabsTrigger>
-                  <TabsTrigger value="keys">File Keys</TabsTrigger>
                   <TabsTrigger value="raw">Raw JSON</TabsTrigger>
                 </TabsList>
                 <TabsContent value="structure" className="max-h-[600px] overflow-y-auto">
-                  <div className="p-4 border rounded-md bg-muted/30 overflow-x-auto scrollbar-thin">
-                    <div className="min-w-[300px]">
-                      {files.length > 0 && (
-                        <ul className="pl-4">
-                          {files.map((file) => (
-                            <li key={file.name} className="my-2">
-                              <div className="flex items-center">
-                                <span className="font-bold text-primary">{file.name}</span>
-                                <span className="ml-2 text-xs text-muted-foreground">File</span>
-                              </div>
-                              {renderJsonKeys(file.content)}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
+                  <div className="mb-4 p-4 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 rounded-md">
+                    <p className="text-sm">
+                      This is the information that will be downloaded if you select 'Download Structure'. It{" "}
+                      <b>should not contain any private information</b> or file content, only the structure of the
+                      files. If you see any private information in the structure below, please let us know and{" "}
+                      <b>do not email us the structure or file</b>
+                    </p>
                   </div>
-                </TabsContent>
-                <TabsContent value="keys" className="max-h-[600px] overflow-y-auto">
-                  <div className="p-4 border rounded-md bg-muted/30 overflow-x-auto scrollbar-thin">
-                    <div className="min-w-[300px]">{renderJsonKeys(selectedFileContent)}</div>
+                  <div className="overflow-x-auto scrollbar-thin">
+                    <pre className="p-4 border rounded-md bg-muted/30 text-sm whitespace-pre-wrap min-w-[300px]">
+                      {JSON.stringify(selectedStructure, null, 2)}
+                    </pre>
                   </div>
                 </TabsContent>
                 <TabsContent value="raw" className="max-h-[600px] overflow-y-auto">
