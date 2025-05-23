@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import type React from "react";
+import Papa from "papaparse";
 
 import { InstructionsModal } from "@/components/instructions-modal";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,14 @@ import {
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { unzip } from "unzipit";
-import { Download, FileArchive, FileJson, Info, Upload } from "lucide-react";
+import {
+  Download,
+  FileArchive,
+  FileJson,
+  FileSpreadsheet,
+  Info,
+  Upload,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 function parse_json(content: string, filename: string) {
@@ -27,6 +35,24 @@ function parse_json(content: string, filename: string) {
     content = content.replace(/^.*? = /, "");
   }
   return JSON.parse(content);
+}
+
+function parse_csv(content: string, filename: string) {
+  console.log(`Parsing CSV file ${filename}`);
+
+  const parseResult = Papa.parse(content, {
+    header: true,
+    skipEmptyLines: true,
+    dynamicTyping: true,
+    transformHeader: (header) => header.trim(),
+  });
+
+  if (parseResult.errors.length > 0) {
+    console.warn(`CSV parsing warnings for ${filename}:`, parseResult.errors);
+  }
+
+  // Papaparse returns the data as a array of key:value dicts, so we can just return the first row
+  return parseResult.data[0];
 }
 
 async function extract_json(file: File) {
@@ -46,18 +72,28 @@ async function extract_zip(file: File) {
 
   // Process each file in the zip
   const promises = Object.entries(entries).map(async ([filename, entry]) => {
-    if (!(filename.endsWith(".json") || filename.endsWith(".js"))) return;
+    if (
+      !(
+        filename.endsWith(".json") ||
+        filename.endsWith(".js") ||
+        filename.endsWith(".csv")
+      )
+    )
+      return;
     if (entry.isDirectory) return;
 
     try {
       const content = await entry.text();
-      const jsonContent = parse_json(content, filename);
+      const jsonContent = filename.endsWith(".csv")
+        ? parse_csv(content, filename)
+        : parse_json(content, filename);
       if (jsonContent != null)
         jsonFiles.push({
           name: filename,
           content: jsonContent,
         });
-      console.log(`Processed JSON file: ${filename}`);
+      console.log({ filename, jsonContent });
+      console.log(`Processed file: ${filename}`);
     } catch (e) {
       console.error(`Error parsing ${filename}:`, e);
     }
@@ -314,9 +350,10 @@ export default function Home() {
           {files.length > 0 && (
             <Card className="w-full">
               <CardHeader>
-                <CardTitle>JSON Files</CardTitle>
+                <CardTitle>Files</CardTitle>
                 <CardDescription>
-                  {files.length} JSON file{files.length !== 1 ? "s" : ""} found
+                  {files.length} JSON/CSV file{files.length !== 1 ? "s" : ""}{" "}
+                  found
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -331,7 +368,11 @@ export default function Home() {
                         className="w-full justify-start text-left mb-2 min-w-[200px]"
                         onClick={() => setSelectedFile(file.name)}
                       >
-                        <FileJson className="h-4 w-4 mr-2 flex-shrink-0" />
+                        {file.name.endsWith(".csv") ? (
+                          <FileSpreadsheet className="h-4 w-4 mr-2 flex-shrink-0" />
+                        ) : (
+                          <FileJson className="h-4 w-4 mr-2 flex-shrink-0" />
+                        )}
                         <span className="truncate">{file.name}</span>
                       </Button>
                     ))}
@@ -346,7 +387,7 @@ export default function Home() {
           <Card className="w-full min-w-0">
             <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
               <div>
-                <CardTitle>JSON Explorer</CardTitle>
+                <CardTitle>File Structure Explorer</CardTitle>
                 <CardDescription>
                   {selectedFile
                     ? `Selected file: ${selectedFile}`
@@ -365,8 +406,8 @@ export default function Home() {
             <CardContent>
               <Tabs defaultValue="structure">
                 <TabsList className="mb-4 overflow-x-auto scrollbar-thin">
-                  <TabsTrigger value="structure">Structure</TabsTrigger>
-                  <TabsTrigger value="raw">Raw JSON</TabsTrigger>
+                  <TabsTrigger value="structure">File Structure</TabsTrigger>
+                  <TabsTrigger value="raw">Raw File Contents</TabsTrigger>
                 </TabsList>
                 <TabsContent
                   value="structure"
