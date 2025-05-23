@@ -6,9 +6,15 @@ import type React from "react";
 
 import { InstructionsModal } from "@/components/instructions-modal";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import JSZip from "jszip";
+import { unzip } from "unzipit";
 import { Download, FileArchive, FileJson, Info, Upload } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
@@ -17,7 +23,7 @@ function parse_json(content: string, filename: string) {
     // Twitter takeouts are js instead of json files
     // We will only parse files in the data folder that consist of only a single variable definition
     // So, we remove the variable assignment, and try to parse the rest as json
-    if (!filename.includes("/data/")) return null;
+    if (!filename.includes("data/")) return null;
     content = content.replace(/^.*? = /, "");
   }
   return JSON.parse(content);
@@ -32,18 +38,19 @@ async function extract_json(file: File) {
 }
 
 async function extract_zip(file: File) {
-  const zip = new JSZip();
-  const contents = await zip.loadAsync(file);
-  console.log("Zip loaded, found files:", Object.keys(contents.files).length);
+  const buffer = await file.arrayBuffer();
+  const { entries } = await unzip(buffer);
+
+  console.log("Zip loaded, found files:", Object.keys(entries).length);
   const jsonFiles: { name: string; content: any }[] = [];
 
   // Process each file in the zip
-  const promises = Object.keys(contents.files).map(async (filename) => {
+  const promises = Object.entries(entries).map(async ([filename, entry]) => {
     if (!(filename.endsWith(".json") || filename.endsWith(".js"))) return;
-    if (contents.files[filename].dir) return;
+    if (entry.isDirectory) return;
 
-    const content = await contents.files[filename].async("string");
     try {
+      const content = await entry.text();
       const jsonContent = parse_json(content, filename);
       if (jsonContent != null)
         jsonFiles.push({
@@ -71,9 +78,14 @@ export default function Home() {
     console.log("Social Media Takeout Explorer loaded");
   }, []);
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
     console.log("File upload triggered");
-    const file = event.target.files?.[0];
+    handleNewFile(event.target.files?.[0]);
+  };
+
+  const handleNewFile = async (file?: File) => {
     console.log("Selected file:", file?.name);
     if (!file) return;
 
@@ -117,60 +129,14 @@ export default function Home() {
     e.stopPropagation();
 
     const file = e.dataTransfer.files[0];
-    if (!file) return;
-
-    if (!file.name.endsWith(".zip")) {
-      setError("Please load a zip file");
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-    setFiles([]);
-    setSelectedFile(null);
-
-    try {
-      const zip = new JSZip();
-      const contents = await zip.loadAsync(file);
-      const jsonFiles: { name: string; content: any }[] = [];
-
-      // Process each file in the zip
-      const promises = Object.keys(contents.files).map(async (filename) => {
-        if (!filename.endsWith(".json")) return;
-        if (contents.files[filename].dir) return;
-
-        const content = await contents.files[filename].async("string");
-        try {
-          const jsonContent = JSON.parse(content);
-          jsonFiles.push({
-            name: filename,
-            content: jsonContent,
-          });
-        } catch (e) {
-          console.error(`Error parsing ${filename}:`, e);
-        }
-      });
-
-      await Promise.all(promises);
-
-      if (jsonFiles.length === 0) {
-        setError("No JSON files found in the zip");
-      } else {
-        setFiles(jsonFiles);
-        setSelectedFile(jsonFiles[0].name);
-      }
-    } catch (e) {
-      console.error("Error processing zip file:", e);
-      setError("Error processing zip file. Please try again.");
-    } finally {
-      setIsLoading(false);
-    }
+    handleNewFile(file);
   };
 
-  const selectedFileContent = selectedFile ? files.find((file) => file.name === selectedFile)?.content : null;
+  const selectedFileContent = selectedFile
+    ? files.find((file) => file.name === selectedFile)?.content
+    : null;
 
   const generateStructure = (obj: any): any => {
-    console.log(obj);
     if (obj == null) return "null";
     if (typeof obj !== "object") {
       return typeof obj;
@@ -187,7 +153,8 @@ export default function Home() {
     return structure;
   };
 
-  const selectedStructure = selectedFileContent == null ? null : generateStructure(selectedFileContent);
+  const selectedStructure =
+    selectedFileContent == null ? null : generateStructure(selectedFileContent);
 
   const handleDownloadStructure = useCallback(() => {
     const structure = files.reduce((acc, file) => {
@@ -195,7 +162,9 @@ export default function Home() {
       return acc;
     }, {} as Record<string, any>);
 
-    const blob = new Blob([JSON.stringify(structure, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(structure, null, 2)], {
+      type: "application/json",
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -222,7 +191,11 @@ export default function Home() {
             />
           </Link>
           <div className="md:hidden">
-            <Link href="https://what-if-horizon.eu/" target="_blank" rel="noopener noreferrer">
+            <Link
+              href="https://what-if-horizon.eu/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               <Image
                 src="https://what-if-horizon.eu/wp-content/uploads/2025/01/wi-ci-logo.png?w=138&h=104"
                 alt="WHAT-IF Logo"
@@ -240,7 +213,11 @@ export default function Home() {
           <div className="flex items-center gap-4">
             <InstructionsModal />
             <div className="hidden md:block">
-              <Link href="https://what-if-horizon.eu/" target="_blank" rel="noopener noreferrer">
+              <Link
+                href="https://what-if-horizon.eu/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 <Image
                   src="https://what-if-horizon.eu/wp-content/uploads/2025/01/wi-ci-logo.png?w=138&h=104"
                   alt="WHAT-IF Logo"
@@ -258,7 +235,8 @@ export default function Home() {
         <div className="flex items-start">
           <Info className="h-5 w-5 mr-2 mt-0.5 flex-shrink-0" />
           <p>
-            Please download your takeout data. You can find instructions for download the data{" "}
+            Please download your takeout data. You can find instructions for
+            download the data{" "}
             <a
               href="https://donation-instructions.what-if-horizon.eu/"
               target="_blank"
@@ -267,9 +245,11 @@ export default function Home() {
             >
               here
             </a>
-            , or with the instructions button in the top. After downloading it, please load them in the "Load Takeout
-            File" box. You can then download the structure file and mail it to us. The structure file contains only the
-            information shown in the 'Structure' tab, so does not contain any content of your posts, messages etc.
+            , or with the instructions button in the top. After downloading it,
+            please load them in the "Load Takeout File" box. You can then
+            download the structure file and mail it to us. The structure file
+            contains only the information shown in the 'Structure' tab, so does
+            not contain any content of your posts, messages etc.
           </p>
         </div>
       </div>
@@ -280,13 +260,16 @@ export default function Home() {
             <CardHeader>
               <CardTitle>Load Takeout File</CardTitle>
               <CardDescription>
-                Load the social media takeout file here. This is a .zip file you downloaded from the social media site.
-                This file is kept on your computer and not uploaded to the researchers
+                Load the social media takeout file here. This is a .zip file you
+                downloaded from the social media site. This file is kept on your
+                computer and not uploaded to the researchers
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div
-                className={`border-2 border-dashed rounded-lg p-8 text-center ${isLoading ? "bg-muted" : ""}`}
+                className={`border-2 border-dashed rounded-lg p-8 text-center ${
+                  isLoading ? "bg-muted" : ""
+                }`}
                 onDragOver={handleDragOver}
                 onDrop={handleDrop}
               >
@@ -320,7 +303,11 @@ export default function Home() {
                 </div>
               </div>
 
-              {error && <div className="mt-4 p-3 bg-destructive/10 text-destructive rounded-md text-sm">{error}</div>}
+              {error && (
+                <div className="mt-4 p-3 bg-destructive/10 text-destructive rounded-md text-sm">
+                  {error}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -338,7 +325,9 @@ export default function Home() {
                     {files.map((file) => (
                       <Button
                         key={file.name}
-                        variant={selectedFile === file.name ? "default" : "outline"}
+                        variant={
+                          selectedFile === file.name ? "default" : "outline"
+                        }
                         className="w-full justify-start text-left mb-2 min-w-[200px]"
                         onClick={() => setSelectedFile(file.name)}
                       >
@@ -359,10 +348,16 @@ export default function Home() {
               <div>
                 <CardTitle>JSON Explorer</CardTitle>
                 <CardDescription>
-                  {selectedFile ? `Selected file: ${selectedFile}` : "Explore JSON structure"}
+                  {selectedFile
+                    ? `Selected file: ${selectedFile}`
+                    : "Explore JSON structure"}
                 </CardDescription>
               </div>
-              <Button onClick={handleDownloadStructure} size="sm" className="self-start sm:self-center">
+              <Button
+                onClick={handleDownloadStructure}
+                size="sm"
+                className="self-start sm:self-center"
+              >
                 <Download className="h-4 w-4 mr-2" />
                 Download Structure
               </Button>
@@ -373,13 +368,18 @@ export default function Home() {
                   <TabsTrigger value="structure">Structure</TabsTrigger>
                   <TabsTrigger value="raw">Raw JSON</TabsTrigger>
                 </TabsList>
-                <TabsContent value="structure" className="max-h-[600px] overflow-y-auto">
+                <TabsContent
+                  value="structure"
+                  className="max-h-[600px] overflow-y-auto"
+                >
                   <div className="mb-4 p-4 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 rounded-md">
                     <p className="text-sm">
-                      This is the information that will be downloaded if you select 'Download Structure'. It{" "}
-                      <b>should not contain any private information</b> or file content, only the structure of the
-                      files. If you see any private information in the structure below, please let us know and{" "}
-                      <b>do not email us the structure or file</b>
+                      This is the information that will be downloaded if you
+                      select 'Download Structure'. It{" "}
+                      <b>should not contain any private information</b> or file
+                      content, only the structure of the files. If you see any
+                      private information in the structure below, please let us
+                      know and <b>do not email us the structure or file</b>
                     </p>
                   </div>
                   <div className="overflow-x-auto scrollbar-thin">
@@ -388,12 +388,17 @@ export default function Home() {
                     </pre>
                   </div>
                 </TabsContent>
-                <TabsContent value="raw" className="max-h-[600px] overflow-y-auto">
+                <TabsContent
+                  value="raw"
+                  className="max-h-[600px] overflow-y-auto"
+                >
                   <div className="mb-4 p-4 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 rounded-md">
                     <p className="text-sm">
-                      The raw JSON content is displayed for your information only. We do not ask you to share this data
-                      with us or with anyone, and this data is not included in the Structure file you can download. This
-                      data is only displayed on your computer and not stored or uploaded to any server.
+                      The raw JSON content is displayed for your information
+                      only. We do not ask you to share this data with us or with
+                      anyone, and this data is not included in the Structure
+                      file you can download. This data is only displayed on your
+                      computer and not stored or uploaded to any server.
                     </p>
                   </div>
                   <div className="overflow-x-auto scrollbar-thin">
